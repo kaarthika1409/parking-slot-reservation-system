@@ -1,0 +1,15 @@
+com\parking\ParkingApplication$1.class
+com\parking\service\BookingScheduler.class
+com\parking\controller\UserController.class
+com\parking\controller\AuthController.class
+com\parking\model\User.class
+com\parking\ParkingApplication.class
+com\parking\model\ReserveRequest.class
+com\parking\model\Booking.class
+com\parking\repository\UserRepository.class
+com\parking\service\ParkingService.class
+com\parking\repository\SlotRepository.class
+com\parking\repository\BookingRepository.class
+com\parking\controller\AdminController.class
+com\parking\model\BulkSlotRequest.class
+com\parking\model\Slot.class
