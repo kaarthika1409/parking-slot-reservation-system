@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { LogOut, User as UserIcon, ShieldCheck, LayoutDashboard, History } from 'lucide-react';
+import { LogOut, User as UserIcon, ShieldCheck, LayoutDashboard, History, ParkingSquare, TrendingUp } from 'lucide-react';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import UserDashboard from './pages/UserDashboard';
+import OwnerDashboard from './pages/OwnerDashboard';
 import Profile from './pages/Profile';
 
 function App() {
@@ -15,6 +16,10 @@ function App() {
     setUser(null);
   };
 
+  const isAdmin = user?.role === 'ADMIN';
+  const isOwner = user?.role === 'SLOT_OWNER';
+  const isUser = user?.role === 'USER';
+
   return (
     <Router>
       <div className="min-h-screen">
@@ -24,13 +29,23 @@ function App() {
               <ShieldCheck size={28} />
               <span>PARKPOINT</span>
             </Link>
-            
+
             <div className="nav-links">
-              {user.role === 'ADMIN' ? (
+              {isAdmin && (
                 <Link to="/admin" className={`nav-item ${window.location.pathname === '/admin' ? 'active' : ''}`}>
                   <LayoutDashboard size={20} /> Dashboard
                 </Link>
-              ) : (
+              )}
+
+              {isOwner && (
+                <>
+                  <Link to="/owner" className={`nav-item ${window.location.pathname === '/owner' ? 'active' : ''}`}>
+                    <ParkingSquare size={20} /> My Slots
+                  </Link>
+                </>
+              )}
+
+              {isUser && (
                 <>
                   <Link to="/user" className={`nav-item ${window.location.pathname === '/user' ? 'active' : ''}`}>
                     <LayoutDashboard size={20} /> Slots
@@ -40,10 +55,18 @@ function App() {
                   </Link>
                 </>
               )}
-              
+
               <div className="nav-divider"></div>
-              
+
               <div className="flex-center gap-md">
+                {/* Role badge */}
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '1rem',
+                  background: isAdmin ? 'rgba(236,72,153,0.15)' : isOwner ? 'rgba(16,185,129,0.15)' : 'rgba(79,70,229,0.15)',
+                  color: isAdmin ? 'var(--secondary)' : isOwner ? 'var(--success)' : 'var(--primary)',
+                }}>
+                  {isAdmin ? 'ADMIN' : isOwner ? 'OWNER' : 'USER'}
+                </span>
                 <span className="text-sm text-bold">{user.fullName}</span>
                 <button onClick={handleLogout} className="btn btn-outline" style={{ padding: '0.4rem 0.8rem', borderRadius: '0.5rem' }}>
                   <LogOut size={16} /> Logout
@@ -56,17 +79,21 @@ function App() {
         <Routes>
           <Route path="/" element={<Home setUser={setUser} />} />
           <Route path="/login/:role" element={<Login setUser={setUser} />} />
-          
+
           <Route path="/admin" element={
-            user?.role === 'ADMIN' ? <AdminDashboard /> : <Navigate to="/" />
+            isAdmin ? <AdminDashboard /> : <Navigate to="/" />
           } />
-          
+
+          <Route path="/owner" element={
+            isOwner ? <OwnerDashboard user={user} /> : <Navigate to="/" />
+          } />
+
           <Route path="/user" element={
-            user?.role === 'USER' ? <UserDashboard user={user} /> : <Navigate to="/" />
+            isUser ? <UserDashboard user={user} /> : <Navigate to="/" />
           } />
-          
+
           <Route path="/profile" element={
-            user?.role === 'USER' ? <Profile user={user} /> : <Navigate to="/" />
+            isUser ? <Profile user={user} /> : <Navigate to="/" />
           } />
         </Routes>
       </div>

@@ -7,6 +7,7 @@ C:\Users\kaart\OneDrive\Desktop\parking\backend\src\main\java\com\parking\Parkin
 C:\Users\kaart\OneDrive\Desktop\parking\backend\src\main\java\com\parking\repository\BookingRepository.java
 C:\Users\kaart\OneDrive\Desktop\parking\backend\src\main\java\com\parking\service\ParkingService.java
 C:\Users\kaart\OneDrive\Desktop\parking\backend\src\main\java\com\parking\model\Slot.java
+C:\Users\kaart\OneDrive\Desktop\parking\backend\src\main\java\com\parking\controller\SlotOwnerController.java
 C:\Users\kaart\OneDrive\Desktop\parking\backend\src\main\java\com\parking\controller\UserController.java
 C:\Users\kaart\OneDrive\Desktop\parking\backend\src\main\java\com\parking\model\User.java
 C:\Users\kaart\OneDrive\Desktop\parking\backend\src\main\java\com\parking\service\BookingScheduler.java

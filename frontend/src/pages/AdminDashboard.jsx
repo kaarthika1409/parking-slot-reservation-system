@@ -1,19 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash, CheckCircle, Database, Eye } from 'lucide-react';
+import { Users, Trash, ShieldCheck, User as UserIcon, ParkingSquare, CheckCircle, Eye } from 'lucide-react';
 import axios from 'axios';
 
 function AdminDashboard() {
+  const [users, setUsers] = useState([]);
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
-  const [showSlotModal, setShowSlotModal] = useState(false);
-  const [newSlot, setNewSlot] = useState({ 
-    location: 'Common Area',
-    prefix: 'STC',
-    twoWheelerCount: 1,
-    fourWheelerCount: 1,
-    pricePerHour2W: 10,
-    pricePerHour4W: 20
-  });
+  const [activeTab, setActiveTab] = useState('users'); // 'users' | 'slots' | 'bookings'
 
   useEffect(() => {
     fetchData();
@@ -21,175 +14,240 @@ function AdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const slotsRes = await axios.get('http://localhost:8080/api/admin/slots');
-      const bookingsRes = await axios.get('http://localhost:8080/api/admin/bookings');
+      const [usersRes, slotsRes, bookingsRes] = await Promise.all([
+        axios.get('http://localhost:8080/api/admin/users'),
+        axios.get('http://localhost:8080/api/admin/slots'),
+        axios.get('http://localhost:8080/api/admin/bookings'),
+      ]);
+      setUsers(usersRes.data);
       setSlots(slotsRes.data);
       setBookings(bookingsRes.data);
     } catch (err) {
-      console.error('Error fetching data');
+      console.error('Error fetching admin data', err);
     }
   };
 
-  const handleAddSlot = async (e) => {
-    e.preventDefault();
-    try {
-      await axios.post('http://localhost:8080/api/admin/slots/bulk', newSlot);
-      setShowSlotModal(false);
-      setNewSlot({ 
-        location: 'Common Area',
-        prefix: 'STC',
-        twoWheelerCount: 1,
-        fourWheelerCount: 1,
-        pricePerHour2W: 10,
-        pricePerHour4W: 20
-      });
-      fetchData();
-    } catch (err) {
-      alert('Error adding slots');
-    }
-  };
-
-  const handleDeleteAll = async () => {
-    if (window.confirm("Are you sure you want to delete ALL parking slots? This action cannot be undone.")) {
+  const handleDeleteUser = async (id) => {
+    if (window.confirm('Remove this user from the system?')) {
       try {
-        await axios.delete('http://localhost:8080/api/admin/slots');
+        await axios.delete(`http://localhost:8080/api/admin/users/${id}`);
         fetchData();
       } catch (err) {
-        alert('Error deleting slots');
+        alert('Error deleting user');
       }
     }
   };
 
-  const handleDeleteAllBookings = async () => {
-    if (window.confirm("Are you sure you want to delete ALL booking history? This action cannot be undone.")) {
+  const handleClearBookings = async () => {
+    if (window.confirm('Delete ALL booking history? This cannot be undone.')) {
       try {
         await axios.delete('http://localhost:8080/api/admin/bookings');
         fetchData();
       } catch (err) {
-        alert('Error deleting bookings');
+        alert('Error clearing bookings');
       }
     }
   };
 
+  const owners = users.filter((u) => u.role === 'SLOT_OWNER');
+  const regularUsers = users.filter((u) => u.role === 'USER');
+
   const stats = {
-    total: slots.length,
-    available: slots.filter(s => s.available).length,
-    occupied: slots.filter(s => !s.available).length
+    totalUsers: users.length,
+    owners: owners.length,
+    users: regularUsers.length,
+    slots: slots.length,
+    bookings: bookings.length,
+  };
+
+  const tabStyle = (tab) => ({
+    padding: '0.6rem 1.5rem',
+    borderRadius: '0.5rem',
+    border: 'none',
+    cursor: 'pointer',
+    fontWeight: 700,
+    fontSize: '0.85rem',
+    transition: 'all 0.2s',
+    background: activeTab === tab ? 'var(--secondary)' : 'rgba(255,255,255,0.05)',
+    color: activeTab === tab ? '#fff' : 'var(--text-muted)',
+  });
+
+  const roleBadge = (role) => {
+    if (role === 'SLOT_OWNER') return { label: 'SLOT OWNER', bg: 'rgba(16,185,129,0.15)', color: 'var(--success)' };
+    if (role === 'ADMIN') return { label: 'ADMIN', bg: 'rgba(236,72,153,0.15)', color: 'var(--secondary)' };
+    return { label: 'USER', bg: 'rgba(79,70,229,0.15)', color: 'var(--primary)' };
+  };
+
+  const UserCard = ({ user }) => {
+    const badge = roleBadge(user.role);
+    return (
+      <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+        <div className="flex-center" style={{ gap: '1rem' }}>
+          <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: badge.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {user.role === 'SLOT_OWNER'
+              ? <ParkingSquare size={22} color={badge.color} />
+              : <UserIcon size={22} color={badge.color} />}
+          </div>
+          <div>
+            <p className="text-bold" style={{ color: '#fff', marginBottom: '0.2rem' }}>{user.fullName || 'N/A'}</p>
+            <p className="text-sm text-muted">@{user.username}</p>
+            {user.phoneNumber && <p className="text-sm text-muted">{user.phoneNumber}</p>}
+          </div>
+        </div>
+        <div className="flex-center" style={{ gap: '0.75rem' }}>
+          <span style={{ padding: '0.25rem 0.75rem', borderRadius: '1rem', fontSize: '0.72rem', fontWeight: 700, background: badge.bg, color: badge.color }}>
+            {badge.label}
+          </span>
+          <button
+            onClick={() => handleDeleteUser(user.id)}
+            style={{ padding: '0.5rem', borderRadius: '0.5rem', background: 'rgba(239,68,68,0.1)', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}
+          >
+            <Trash size={15} />
+          </button>
+        </div>
+      </div>
+    );
   };
 
   return (
     <div className="container" style={{ minHeight: '80vh', paddingTop: '3rem' }}>
+      {/* Header */}
       <div className="flex-between mb-lg animate-fade-up" style={{ alignItems: 'flex-end' }}>
         <div>
           <h1 className="heading-xl">ADMIN DASHBOARD</h1>
-          <p className="subtitle" style={{ marginLeft: 0 }}>Manage parking infrastructure and monitor usage</p>
-        </div>
-        <div className="flex-center" style={{ gap: '1rem' }}>
-          <button 
-            className="btn btn-outline"
-            style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
-            onClick={handleDeleteAll}
-          >
-            <Trash size={20} /> Delete All Slots
-          </button>
-          <button 
-            className="btn btn-primary"
-            onClick={() => setShowSlotModal(true)}
-          >
-            <Plus size={20} /> Add Slots
-          </button>
+          <p className="subtitle" style={{ marginLeft: 0 }}>Manage slot owners, users and oversee system activity</p>
         </div>
       </div>
 
-      {/* Stats Summary Banner */}
-      <div className="grid-cards animate-fade-up" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '3rem', gap: '1.5rem' }}>
-        <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center', borderBottom: '4px solid var(--primary)' }}>
-          <p className="text-sm text-muted text-bold">TOTAL SLOTS</p>
-          <h2 className="heading-xl" style={{ margin: '0.5rem 0', color: '#fff' }}>{stats.total}</h2>
-        </div>
-        <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center', borderBottom: '4px solid var(--success)' }}>
-          <p className="text-sm text-muted text-bold">AVAILABLE</p>
-          <h2 className="heading-xl" style={{ margin: '0.5rem 0', color: 'var(--success)' }}>{stats.available}</h2>
-        </div>
-        <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center', borderBottom: '4px solid var(--danger)' }}>
-          <p className="text-sm text-muted text-bold">OCCUPIED</p>
-          <h2 className="heading-xl" style={{ margin: '0.5rem 0', color: 'var(--danger)' }}>{stats.occupied}</h2>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(400px, 2fr) 1fr', gap: '3rem' }} className="animate-fade-up delay-100">
-        {/* Slot Management */}
-        <div>
-          <div className="flex-center" style={{ gap: '0.5rem', marginBottom: '1.5rem', justifyContent: 'flex-start' }}>
-            <Database color="var(--primary)" />
-            <h2 className="heading-md" style={{ margin: 0 }}>Parking Slots</h2>
+      {/* Stats */}
+      <div className="animate-fade-up" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1.2rem', marginBottom: '3rem' }}>
+        {[
+          { label: 'TOTAL USERS', value: stats.totalUsers, color: 'var(--primary)' },
+          { label: 'SLOT OWNERS', value: stats.owners, color: 'var(--success)' },
+          { label: 'REGULAR USERS', value: stats.users, color: 'var(--accent)' },
+          { label: 'TOTAL SLOTS', value: stats.slots, color: 'var(--secondary)' },
+          { label: 'BOOKINGS', value: stats.bookings, color: '#f59e0b' },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="glass-panel" style={{ padding: '1.25rem', textAlign: 'center', borderBottom: `4px solid ${color}` }}>
+            <p className="text-sm text-muted text-bold">{label}</p>
+            <h2 className="heading-xl" style={{ margin: '0.5rem 0', color }}>{value}</h2>
           </div>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-            {slots.map((slot) => (
-              <div key={slot.id} className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
-                <div className="flex-between" style={{ alignItems: 'flex-start', marginBottom: '1rem' }}>
-                  <div>
-                    <h3 className="heading-md" style={{ margin: 0 }}>{slot.slotNumber}</h3>
-                    <p className="text-sm text-muted">{slot.location}</p>
-                  </div>
-                  {slot.available ? (
-                    <span className="badge badge-success">AVAILABLE</span>
-                  ) : (
-                    <span className="badge badge-danger">OCCUPIED</span>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex-center animate-fade-up delay-100" style={{ gap: '0.5rem', justifyContent: 'flex-start', marginBottom: '2rem' }}>
+        <button style={tabStyle('users')} onClick={() => setActiveTab('users')}>
+          <Users size={15} style={{ marginRight: '0.4rem', verticalAlign: 'middle' }} /> Users ({users.length})
+        </button>
+        <button style={tabStyle('slots')} onClick={() => setActiveTab('slots')}>
+          <ParkingSquare size={15} style={{ marginRight: '0.4rem', verticalAlign: 'middle' }} /> All Slots ({slots.length})
+        </button>
+        <button style={tabStyle('bookings')} onClick={() => setActiveTab('bookings')}>
+          <CheckCircle size={15} style={{ marginRight: '0.4rem', verticalAlign: 'middle' }} /> Bookings ({bookings.length})
+        </button>
+      </div>
+
+      {/* Users Tab */}
+      {activeTab === 'users' && (
+        <div className="animate-fade-up">
+          {owners.length > 0 && (
+            <>
+              <div className="flex-center" style={{ gap: '0.5rem', justifyContent: 'flex-start', marginBottom: '1rem' }}>
+                <ParkingSquare size={18} color="var(--success)" />
+                <h3 className="heading-md" style={{ margin: 0 }}>Slot Owners</h3>
+              </div>
+              <div className="flex-col" style={{ gap: '0.75rem', marginBottom: '2rem' }}>
+                {owners.map((u) => <UserCard key={u.id} user={u} />)}
+              </div>
+            </>
+          )}
+
+          {regularUsers.length > 0 && (
+            <>
+              <div className="flex-center" style={{ gap: '0.5rem', justifyContent: 'flex-start', marginBottom: '1rem' }}>
+                <UserIcon size={18} color="var(--primary)" />
+                <h3 className="heading-md" style={{ margin: 0 }}>Regular Users</h3>
+              </div>
+              <div className="flex-col" style={{ gap: '0.75rem' }}>
+                {regularUsers.map((u) => <UserCard key={u.id} user={u} />)}
+              </div>
+            </>
+          )}
+
+          {users.length === 0 && (
+            <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
+              <Users size={48} color="var(--text-muted)" style={{ marginBottom: '1rem' }} />
+              <p className="text-muted">No users registered yet.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Slots Tab (read-only oversight) */}
+      {activeTab === 'slots' && (
+        <div className="animate-fade-up" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+          {slots.length === 0 ? (
+            <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', gridColumn: '1/-1' }}>
+              <ParkingSquare size={48} color="var(--text-muted)" style={{ marginBottom: '1rem' }} />
+              <p className="text-muted">No parking slots in the system yet.</p>
+            </div>
+          ) : slots.map((slot) => (
+            <div key={slot.id} className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--secondary)' }}>
+              <div className="flex-between" style={{ alignItems: 'flex-start', marginBottom: '1rem' }}>
+                <div>
+                  <h3 className="heading-md" style={{ margin: 0 }}>{slot.slotNumber}</h3>
+                  <p className="text-sm text-muted">{slot.location}</p>
+                  {slot.ownerName && (
+                    <p className="text-sm" style={{ color: 'var(--success)', marginTop: '0.25rem' }}>
+                      Owner: {slot.ownerName}
+                    </p>
                   )}
                 </div>
-                
-                <div className="flex-between" style={{ marginTop: '1.5rem' }}>
-                  <span className="text-bold text-gradient" style={{ fontSize: '1.25rem' }}>₹{slot.pricePerHour}/hr</span>
-                  <div className="flex-center" style={{ gap: '0.5rem' }}>
-                    <button style={{ padding: '0.5rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', cursor: 'pointer' }}>
-                      <Edit size={16} />
-                    </button>
-                    <button style={{ padding: '0.5rem', borderRadius: '0.5rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>
-                      <Trash size={16} />
-                    </button>
-                  </div>
-                </div>
+                {slot.available
+                  ? <span className="badge badge-success">AVAILABLE</span>
+                  : <span className="badge badge-danger">OCCUPIED</span>}
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
-            <div className="flex-center" style={{ gap: '0.5rem', justifyContent: 'flex-start' }}>
-              <CheckCircle color="var(--accent)" />
-              <h2 className="heading-md" style={{ margin: 0 }}>Recent Bookings</h2>
+              <span className="text-bold text-gradient" style={{ fontSize: '1.1rem' }}>₹{slot.pricePerHour}/hr</span>
             </div>
-            <button 
+          ))}
+        </div>
+      )}
+
+      {/* Bookings Tab */}
+      {activeTab === 'bookings' && (
+        <div className="animate-fade-up">
+          <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
+            <h3 className="heading-md" style={{ margin: 0 }}>All Bookings</h3>
+            <button
               className="btn btn-outline"
               style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', borderColor: 'var(--danger)', color: 'var(--danger)' }}
-              onClick={handleDeleteAllBookings}
+              onClick={handleClearBookings}
             >
               Clear All
             </button>
           </div>
-          
           <div className="flex-col" style={{ gap: '1rem' }}>
-            {bookings.map((booking) => (
+            {bookings.length === 0 ? (
+              <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
+                <CheckCircle size={48} color="var(--text-muted)" style={{ marginBottom: '1rem' }} />
+                <p className="text-muted">No bookings yet.</p>
+              </div>
+            ) : bookings.map((booking) => (
               <div key={booking.id} className="glass-panel flex-col" style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.03)', gap: '0.75rem' }}>
                 <div className="flex-between">
                   <span className="text-sm text-muted text-bold">#{booking.id.slice(-6).toUpperCase()}</span>
                   <div className="flex-center" style={{ gap: '0.5rem' }}>
-                    <span className={`badge`} style={{ 
-                      fontSize: '0.7rem', 
-                      background: booking.bookingStatus === 'ACTIVE' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    <span className="badge" style={{
+                      fontSize: '0.7rem',
+                      background: booking.bookingStatus === 'ACTIVE' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
                       color: booking.bookingStatus === 'ACTIVE' ? 'var(--success)' : 'var(--danger)'
-                    }}>
-                      {booking.bookingStatus || 'ACTIVE'}
-                    </span>
+                    }}>{booking.bookingStatus || 'ACTIVE'}</span>
                     <span className="badge" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.7rem' }}>
                       {booking.paymentStatus}
                     </span>
                   </div>
                 </div>
-                
                 <div>
                   <h4 style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.25rem', fontSize: '1.1rem' }}>{booking.username || 'User'}</h4>
                   <div className="flex-center text-sm text-muted" style={{ justifyContent: 'flex-start', gap: '1rem', marginTop: '0.25rem' }}>
@@ -197,121 +255,26 @@ function AdminDashboard() {
                     <span>Slot: <span className="text-bold" style={{ color: 'var(--accent)' }}>{booking.slotNumber}</span></span>
                   </div>
                 </div>
-                
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 1.5fr) 1fr', gap: '0.75rem', background: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '0.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '0.75rem', background: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '0.5rem' }}>
                   <div>
-                    <p className="text-xs text-muted" style={{ marginBottom: '0.1rem' }}>Booked Timing</p>
-                    <p className="text-sm text-bold" style={{ color: '#fff' }}>
-                      {booking.parkingTime} - {booking.endTime ? new Date(booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
-                    </p>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
                     <p className="text-xs text-muted" style={{ marginBottom: '0.1rem' }}>Date</p>
                     <p className="text-sm text-bold" style={{ color: '#fff' }}>{booking.parkingDate || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted" style={{ marginBottom: '0.1rem' }}>Time</p>
+                    <p className="text-sm text-bold" style={{ color: '#fff' }}>{booking.parkingTime}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted" style={{ marginBottom: '0.1rem' }}>Duration</p>
                     <p className="text-sm text-bold" style={{ color: '#fff' }}>{booking.duration} hr(s)</p>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <p className="text-xs text-muted" style={{ marginBottom: '0.1rem' }}>Total Amount</p>
+                  <div>
+                    <p className="text-xs text-muted" style={{ marginBottom: '0.1rem' }}>Amount</p>
                     <p className="text-sm text-bold text-gradient">₹{booking.totalAmount}</p>
                   </div>
                 </div>
-
-                <div className="flex-between" style={{ marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1px solid var(--glass-border)' }}>
-                  <span className="text-sm text-bold" style={{ color: 'var(--accent)' }}>Slot {booking.slotNumber}</span>
-                  <Eye size={16} className="text-muted" style={{ cursor: 'pointer', transition: 'color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.color = 'var(--primary)'} onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-muted)'} />
-                </div>
               </div>
             ))}
-          </div>
-        </div>
-      </div>
-
-      {showSlotModal && (
-        <div className="modal-overlay">
-          <div className="glass-panel modal-content">
-            <h2 className="heading-md" style={{ marginBottom: '1.5rem' }}>Add New Parking Slot</h2>
-            <form onSubmit={handleAddSlot}>
-              <div className="form-group">
-                <label className="form-label">Area / Location</label>
-                <input 
-                  type="text" 
-                  className="form-input"
-                  value={newSlot.location}
-                  onChange={(e) => setNewSlot({...newSlot, location: e.target.value})}
-                  placeholder="e.g. Common Area" 
-                  required 
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Slot Name Prefix</label>
-                <input 
-                  type="text" 
-                  className="form-input"
-                  value={newSlot.prefix}
-                  onChange={(e) => setNewSlot({...newSlot, prefix: e.target.value.toUpperCase()})}
-                  placeholder="e.g. STC" 
-                  required 
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
-                <div style={{ background: 'rgba(59, 130, 246, 0.05)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid rgba(59, 130, 246, 0.1)' }}>
-                  <h3 className="text-sm text-bold mb-sm" style={{ color: 'var(--primary)' }}>2 WHEELERS</h3>
-                  <div className="form-group">
-                    <label className="form-label">Count</label>
-                    <input 
-                      type="number" 
-                      className="form-input"
-                      value={newSlot.twoWheelerCount}
-                      onChange={(e) => setNewSlot({...newSlot, twoWheelerCount: parseInt(e.target.value) || 0})}
-                      required 
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Price/Hr (₹)</label>
-                    <input 
-                      type="number" 
-                      className="form-input"
-                      value={newSlot.pricePerHour2W}
-                      onChange={(e) => setNewSlot({...newSlot, pricePerHour2W: parseFloat(e.target.value) || 0})}
-                      required 
-                    />
-                  </div>
-                </div>
-
-                <div style={{ background: 'rgba(139, 92, 246, 0.05)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid rgba(139, 92, 246, 0.1)' }}>
-                  <h3 className="text-sm text-bold mb-sm" style={{ color: 'var(--accent)' }}>4 WHEELERS</h3>
-                  <div className="form-group">
-                    <label className="form-label">Count</label>
-                    <input 
-                      type="number" 
-                      className="form-input"
-                      value={newSlot.fourWheelerCount}
-                      onChange={(e) => setNewSlot({...newSlot, fourWheelerCount: parseInt(e.target.value) || 0})}
-                      required 
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Price/Hr (₹)</label>
-                    <input 
-                      type="number" 
-                      className="form-input"
-                      value={newSlot.pricePerHour4W}
-                      onChange={(e) => setNewSlot({...newSlot, pricePerHour4W: parseFloat(e.target.value) || 0})}
-                      required 
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-row" style={{ marginTop: '2rem' }}>
-                <button type="button" onClick={() => setShowSlotModal(false)} className="btn btn-outline">Cancel</button>
-                <button type="submit" className="btn btn-primary">Add All Slots</button>
-              </div>
-            </form>
           </div>
         </div>
       )}

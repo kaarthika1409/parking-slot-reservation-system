@@ -17,5 +17,11 @@ public class Slot {
     private String type; // Two Wheeler, Four Wheeler
     private boolean available = true;
     private double pricePerHour;
-    private String location; // Floor 1, Floor 2, etc.
+    private String location; // Deprecated or used as combined fallback
+    private String parkingName;
+    private String street;
+    private String area;
+    private String district;
+    private String ownerId;   // ID of the slot owner who created this slot
+    private String ownerName; // Display name of the slot owner
 }

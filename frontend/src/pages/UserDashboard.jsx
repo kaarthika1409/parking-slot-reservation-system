@@ -1,300 +1,370 @@
-import React, { useState, useEffect } from 'react';
-import { Car, Bike, MapPin, AlertCircle, Ticket } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Car, Bike, MapPin, Ticket, ArrowLeft, ChevronRight } from 'lucide-react';
 import axios from 'axios';
 
-function UserDashboard({ user }) {
-  const [slots, setSlots] = useState([]);
-  const [filter, setFilter] = useState('All');
-  const [bookingModal, setBookingModal] = useState(null); // stores selected slot
-  const [formData, setFormData] = useState({
-    vehicleType: 'Four Wheeler',
-    vehicleNumber: '',
-    parkingDate: '',
-    parkingTime: '',
-    endTime: ''
-  });
-  const [ticket, setTicket] = useState(null);
-  const [error, setError] = useState(null);
+/* ── Step indicator ─────────────────────────────────────────────────────────── */
+function Stepper({ step }) {
+  const steps = ['Location', 'Vehicle Type', 'Book Slot'];
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0', marginBottom: '2.5rem' }}>
+      {steps.map((label, i) => {
+        const active = i + 1 === step;
+        const done   = i + 1 < step;
+        return (
+          <React.Fragment key={label}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{
+                width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.75rem', fontWeight: 700,
+                background: done ? 'var(--success)' : active ? 'var(--primary)' : 'rgba(255,255,255,0.08)',
+                color: (done || active) ? '#fff' : 'var(--text-muted)',
+                transition: 'all 0.3s',
+              }}>{done ? '✓' : i + 1}</div>
+              <span style={{
+                fontSize: '0.82rem', fontWeight: active ? 700 : 400,
+                color: active ? '#fff' : done ? 'var(--success)' : 'var(--text-muted)',
+              }}>{label}</span>
+            </div>
+            {i < steps.length - 1 && (
+              <div style={{ flex: 1, height: 2, margin: '0 0.75rem', background: done ? 'var(--success)' : 'rgba(255,255,255,0.08)', borderRadius: 2, transition: 'background 0.3s' }} />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
 
-  useEffect(() => {
-    fetchSlots();
-  }, []);
+/* ── Back button ────────────────────────────────────────────────────────────── */
+function BackBtn({ onClick, label }) {
+  return (
+    <button onClick={onClick} style={{
+      display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+      background: 'rgba(255,255,255,0.06)', border: '1px solid var(--glass-border)',
+      borderRadius: '0.5rem', color: 'var(--text-muted)', cursor: 'pointer',
+      padding: '0.4rem 0.9rem', fontSize: '0.82rem', marginBottom: '1.25rem', transition: 'color 0.2s',
+    }}
+    onMouseEnter={e => e.currentTarget.style.color='#fff'}
+    onMouseLeave={e => e.currentTarget.style.color='var(--text-muted)'}
+    ><ArrowLeft size={15}/> {label}</button>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+export default function UserDashboard({ user }) {
+  const [slots,     setSlots]     = useState([]);
+  const [location,  setLocation]  = useState(null); // Step 1
+  const [vtype,     setVtype]     = useState(null); // Step 2
+  const [modal,     setModal]     = useState(null); // slot being booked
+  const [form,      setForm]      = useState({ vehicleNumber:'', parkingDate:'', parkingTime:'', endTime:'' });
+  const [ticket,    setTicket]    = useState(null);
+  const [error,     setError]     = useState(null);
+
+  useEffect(() => { fetchSlots(); }, []);
 
   const fetchSlots = async () => {
-    try {
-      const res = await axios.get('http://localhost:8080/api/user/slots');
-      setSlots(res.data);
-    } catch (err) {
-      console.error('Error fetching slots');
-    }
+    try { const r = await axios.get('http://localhost:8080/api/user/slots'); setSlots(r.data); }
+    catch(e) { console.error(e); }
   };
 
-  const handleBookSlot = async (e) => {
-    e.preventDefault();
-    setError(null);
-    try {
-      const payload = {
-        userId: user.id,
-        slotId: bookingModal.id,
-        vehicleType: bookingModal.type,
-        vehicleNumber: formData.vehicleNumber.toUpperCase(),
-        parkingDate: formData.parkingDate,
-        parkingTime: formData.parkingTime,
-        endTime: formData.endTime
+  /* derived */
+  const locationStats = useMemo(() => {
+    const m = {};
+    slots.forEach(s => {
+      const l = s.parkingName || s.location || 'Unknown';
+      if (!m[l]) m[l] = { 
+        total:0, available:0, occupied:0, 
+        street: s.street, area: s.area, district: s.district, fallbackLoc: s.location 
       };
-      const res = await axios.post('http://localhost:8080/api/user/reserve', payload);
-      setBookingModal(null);
-      
-      // Reset form
-      setFormData({
-        vehicleType: 'Four Wheeler',
-        vehicleNumber: '',
-        parkingDate: '',
-        parkingTime: '',
-        endTime: ''
-      });
-      
-      setTicket(res.data);
-      fetchSlots();
-    } catch (err) {
-      if (err.response && err.response.data && err.response.data.message) {
-        setError(err.response.data.message);
-      } else {
-        setError('Error booking slot: ' + (err.response?.data || err.message || 'System error'));
-      }
-    }
-  };
+      m[l].total++;
+      s.available ? m[l].available++ : m[l].occupied++;
+    });
+    return Object.entries(m).map(([name, st]) => ({ name, ...st }));
+  }, [slots]);
 
-  const filteredSlots = slots.filter(slot => filter === 'All' || slot.type === filter);
+  const vtypeStats = useMemo(() => {
+    if (!location) return {};
+    const lSlots = slots.filter(s => (s.parkingName || s.location || 'Unknown') === location);
+    const m = {};
+    lSlots.forEach(s => {
+      const t = s.type || 'Other';
+      if (!m[t]) m[t] = { total:0, available:0 };
+      m[t].total++;
+      if (s.available) m[t].available++;
+    });
+    return m;
+  }, [slots, location]);
 
-  // Set default date when opening modal
+  const finalSlots = useMemo(() =>
+    slots.filter(s => (s.parkingName || s.location || 'Unknown') === location && s.type === vtype),
+    [slots, location, vtype]
+  );
+
+  /* booking */
   const openModal = (slot) => {
     const today = new Date().toISOString().split('T')[0];
-    const now = new Date();
-    const startTime = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
-    
-    // Default end time is 1 hour later
-    const later = new Date(now.getTime() + 60 * 60 * 1000);
-    const endTime = later.getHours().toString().padStart(2, '0') + ':' + later.getMinutes().toString().padStart(2, '0');
-    
-    setFormData(prev => ({ 
-      ...prev, 
-      parkingDate: today,
-      parkingTime: startTime,
-      endTime: endTime
-    }));
-    setBookingModal(slot);
+    const now = new Date(), pad = n => n.toString().padStart(2,'0');
+    const start = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const later = new Date(now.getTime() + 3600000);
+    const end   = `${pad(later.getHours())}:${pad(later.getMinutes())}`;
+    setForm({ vehicleNumber:'', parkingDate:today, parkingTime:start, endTime:end });
+    setError(null);
+    setModal(slot);
   };
 
-  return (
-    <div className="container" style={{ minHeight: '80vh', paddingTop: '3rem' }}>
-      <div className="flex-between mb-lg animate-fade-up" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h1 className="heading-xl">DASHBOARD</h1>
-          <p className="subtitle" style={{ marginLeft: 0 }}>Select an available slot to manage your booking</p>
-        </div>
+  const handleBook = async (e) => {
+    e.preventDefault(); setError(null);
+    try {
+      const r = await axios.post('http://localhost:8080/api/user/reserve', {
+        userId: user.id, slotId: modal.id, vehicleType: modal.type,
+        vehicleNumber: form.vehicleNumber.toUpperCase(),
+        parkingDate: form.parkingDate, parkingTime: form.parkingTime, endTime: form.endTime,
+      });
+      setModal(null); setTicket(r.data); fetchSlots();
+    } catch(err) {
+      setError(err.response?.data?.message || 'Booking failed');
+    }
+  };
 
-        <div className="flex-center" style={{ gap: '1rem' }}>
-          <div className="flex-center" style={{ background: 'var(--glass-border)', padding: '0.25rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
-            {['All', 'Four Wheeler', 'Two Wheeler', 'Cycle'].map((type) => (
-              <button
-                key={type}
-                onClick={() => setFilter(type)}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '0.5rem',
-                  fontWeight: 600,
-                  fontSize: '0.875rem',
-                  transition: 'all 0.3s ease',
-                  background: filter === type ? 'var(--primary)' : 'transparent',
-                  color: filter === type ? '#fff' : 'var(--text-muted)',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                {type}
-              </button>
-            ))}
+  const step = !location ? 1 : !vtype ? 2 : 3;
+
+  /* ── STEP 1: Location ─────────────────────────────────────────────────── */
+  if (step === 1) return (
+    <div className="container" style={{ minHeight:'80vh', paddingTop:'3rem' }}>
+      <Stepper step={1}/>
+      <div className="animate-fade-up" style={{ textAlign:'center', marginBottom:'3rem' }}>
+        <h1 className="heading-xl">FIND PARKING</h1>
+        <p className="subtitle">Step 1 — Choose a parking location</p>
+      </div>
+
+      {locationStats.length === 0
+        ? <div className="glass-panel" style={{ padding:'4rem', textAlign:'center', maxWidth:480, margin:'0 auto' }}>
+            <MapPin size={48} color="var(--text-muted)" style={{ marginBottom:'1rem' }}/>
+            <p className="text-muted">No parking slots available yet.</p>
           </div>
+        : <div className="animate-fade-up delay-100" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))', gap:'1.5rem' }}>
+            {locationStats.map((st) => {
+              const { name, total, available, occupied } = st;
+              return (
+              <div key={name} className="glass-panel"
+                onClick={() => setLocation(name)}
+                style={{ cursor:'pointer', padding:'2rem', borderLeft:'4px solid var(--primary)', transition:'transform 0.2s,box-shadow 0.2s', position:'relative', overflow:'hidden' }}
+                onMouseEnter={e => { e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 12px 40px rgba(79,70,229,0.25)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow=''; }}
+              >
+                <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', marginBottom:'1.5rem' }}>
+                  <div style={{ width:48, height:48, borderRadius:'0.75rem', background:'rgba(79,70,229,0.15)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    <MapPin size={24} color="var(--primary)"/>
+                  </div>
+                  <div>
+                    <h2 className="heading-md" style={{ margin:0, marginBottom:'0.15rem' }}>{name}</h2>
+                    <p className="text-xs text-muted">
+                      {[st.street, st.area, st.district].filter(Boolean).join(', ') || st.fallbackLoc || ''}
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0.75rem', marginBottom:'1.25rem' }}>
+                  {[['TOTAL', total,'#fff'],['FREE', available,'var(--success)'],['BUSY', occupied,'var(--danger)']].map(([l,v,c])=>(
+                    <div key={l} style={{ textAlign:'center', background:'rgba(255,255,255,0.03)', borderRadius:'0.5rem', padding:'0.6rem' }}>
+                      <p style={{ fontSize:'0.62rem', color:'var(--text-muted)', fontWeight:700, marginBottom:'0.2rem' }}>{l}</p>
+                      <p style={{ fontSize:'1.3rem', fontWeight:800, color:c }}>{v}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* availability bar */}
+                <div style={{ height:5, borderRadius:99, background:'rgba(255,255,255,0.08)', overflow:'hidden', marginBottom:'1.25rem' }}>
+                  <div style={{ height:'100%', borderRadius:99, width:`${total>0?(available/total)*100:0}%`, background: available>0?'var(--success)':'var(--danger)', transition:'width 0.5s' }}/>
+                </div>
+
+                <button className="btn btn-primary" style={{ width:'100%', pointerEvents:'none' }}>
+                  Select &nbsp;<ChevronRight size={16}/>
+                </button>
+              </div>
+              );
+            })}
+          </div>
+      }
+    </div>
+  );
+
+  /* ── STEP 2: Vehicle Type ─────────────────────────────────────────────── */
+  if (step === 2) {
+    const types = [
+      { key:'Four Wheeler', label:'Four Wheeler', Icon:Car,  color:'var(--primary)', bg:'rgba(79,70,229,0.15)' },
+      { key:'Two Wheeler',  label:'Two Wheeler',  Icon:Bike, color:'var(--accent)',  bg:'rgba(139,92,246,0.15)' },
+    ];
+    return (
+      <div className="container" style={{ minHeight:'80vh', paddingTop:'3rem' }}>
+        <Stepper step={2}/>
+        <BackBtn onClick={() => setLocation(null)} label="All Locations"/>
+        <div className="animate-fade-up" style={{ textAlign:'center', marginBottom:'3rem' }}>
+          <h1 className="heading-xl">{location}</h1>
+          <p className="subtitle">Step 2 — Choose your vehicle type</p>
+        </div>
+
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'2rem', maxWidth:600, margin:'0 auto' }}>
+          {types.map(({ key, label, Icon, color, bg }) => {
+            const st = vtypeStats[key] || { total:0, available:0 };
+            const hasSlots = st.total > 0;
+            return (
+              <div key={key} className="glass-panel"
+                onClick={() => hasSlots && setVtype(key)}
+                style={{
+                  cursor: hasSlots ? 'pointer' : 'not-allowed',
+                  opacity: hasSlots ? 1 : 0.45,
+                  padding:'2.5rem 2rem', textAlign:'center',
+                  borderTop:`4px solid ${color}`,
+                  transition:'transform 0.2s,box-shadow 0.2s',
+                }}
+                onMouseEnter={e => { if(hasSlots){ e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow=`0 12px 40px ${color}44`; }}}
+                onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow=''; }}
+              >
+                <div style={{ width:80, height:80, borderRadius:'1.5rem', background:bg, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 1.5rem' }}>
+                  <Icon size={40} color={color}/>
+                </div>
+                <h2 className="heading-md">{label}</h2>
+                <p className="text-muted text-sm" style={{ marginBottom:'1.5rem' }}>
+                  {hasSlots
+                    ? <><span style={{ color:'var(--success)', fontWeight:700 }}>{st.available}</span> of <strong>{st.total}</strong> slots available</>
+                    : 'No slots at this location'}
+                </p>
+                <button className="btn btn-primary" style={{ width:'100%', pointerEvents:'none', background: color, borderColor: color }}>
+                  {hasSlots ? <>View Slots <ChevronRight size={16}/></> : 'Unavailable'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  /* ── STEP 3: Slots ────────────────────────────────────────────────────── */
+  const avail = finalSlots.filter(s=>s.available).length;
+  return (
+    <div className="container" style={{ minHeight:'80vh', paddingTop:'3rem' }}>
+      <Stepper step={3}/>
+      <BackBtn onClick={() => setVtype(null)} label="Change Vehicle Type"/>
+
+      <div className="flex-between mb-lg animate-fade-up" style={{ alignItems:'flex-end', flexWrap:'wrap', gap:'1rem' }}>
+        <div>
+          <h1 className="heading-xl">{location}</h1>
+          <p className="subtitle" style={{ marginLeft:0 }}>
+            {vtype} · <span style={{ color:'var(--success)' }}>{avail} available</span> of {finalSlots.length} slots
+          </p>
         </div>
       </div>
 
-      {/* Availability Stats Summary */}
-      <div className="grid-cards animate-fade-up delay-100" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '3rem', gap: '1.5rem' }}>
-        <div className="glass-panel" style={{ padding: '1.25rem', textAlign: 'center', borderBottom: '4px solid var(--primary)' }}>
-          <p className="text-xs text-muted text-bold">TOTAL SLOTS</p>
-          <h2 className="heading-lg" style={{ margin: '0.25rem 0', color: '#fff' }}>{slots.length}</h2>
-        </div>
-        <div className="glass-panel" style={{ padding: '1.25rem', textAlign: 'center', borderBottom: '4px solid var(--success)' }}>
-          <p className="text-xs text-muted text-bold">AVAILABLE NOW</p>
-          <h2 className="heading-lg" style={{ margin: '0.25rem 0', color: 'var(--success)' }}>{slots.filter(s => s.available).length}</h2>
-        </div>
-        <div className="glass-panel" style={{ padding: '1.25rem', textAlign: 'center', borderBottom: '4px solid var(--danger)' }}>
-          <p className="text-xs text-muted text-bold">OCCUPIED</p>
-          <h2 className="heading-lg" style={{ margin: '0.25rem 0', color: 'var(--danger)' }}>{slots.filter(s => !s.available).length}</h2>
-        </div>
-      </div>
-
+      {/* Ticket banner */}
       {ticket && (
         <div className="ticket-banner animate-fade-up">
-          <div className="ticket-icon">
-            <Ticket size={32} />
-          </div>
+          <div className="ticket-icon"><Ticket size={32}/></div>
           <div>
-            <h3 className="heading-md" style={{ color: 'var(--accent)', marginBottom: '0.25rem' }}>Booking Confirmed!</h3>
-            <p className="text-muted text-sm">Your slot has been successfully allocated.</p>
-            <div className="ticket-details" style={{ flexWrap: 'wrap' }}>
+            <h3 className="heading-md" style={{ color:'var(--accent)', marginBottom:'0.25rem' }}>Booking Confirmed!</h3>
+            <div className="ticket-details" style={{ flexWrap:'wrap' }}>
               <span className="ticket-pill">Slot: {ticket.slotNumber}</span>
               <span className="ticket-pill">Vehicle: {ticket.vehicleNumber}</span>
               <span className="ticket-pill">Date: {ticket.parkingDate}</span>
-              <span className="ticket-pill">Time: {ticket.parkingTime} - {new Date(ticket.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({ticket.duration} hrs)</span>
+              <span className="ticket-pill">Time: {ticket.parkingTime} – {new Date(ticket.endTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} ({ticket.duration} hrs)</span>
             </div>
           </div>
-          <button onClick={() => setTicket(null)} className="btn btn-outline" style={{ marginLeft: 'auto', borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-            Close Ticket
-          </button>
+          <button onClick={() => setTicket(null)} className="btn btn-outline" style={{ marginLeft:'auto', borderColor:'var(--accent)', color:'var(--accent)' }}>Close</button>
         </div>
       )}
 
-      {/* Slots Layout Preview */}
-      <div className="grid-cards animate-fade-up delay-100">
-        {filteredSlots.map((slot) => (
-          <div 
-            key={slot.id} 
-            className="glass-panel"
-            style={{ 
-              opacity: slot.available ? 1 : 0.8,
-              borderColor: slot.available ? 'var(--glass-border)' : 'rgba(239, 68, 68, 0.4)',
-              position: 'relative',
-              overflow: 'hidden'
-            }}
-          >
-            <div className="flex-between" style={{ alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-              <div className="flex-center" style={{ height: '48px', width: '48px', borderRadius: '0.75rem', background: 'rgba(255,255,255,0.05)' }}>
-                {slot.type === 'Four Wheeler' ? <Car color="var(--primary)" /> : <Bike color="var(--primary)" />}
-              </div>
-              <span className={`badge ${slot.available ? 'badge-success' : 'badge-danger'}`}>
-                {slot.available ? 'AVAILABLE' : 'OCCUPIED'}
-              </span>
-            </div>
-
-            <h3 className="heading-md" style={{ marginBottom: '0.25rem' }}>{slot.slotNumber}</h3>
-            <div className="flex-center gap-sm text-sm text-muted" style={{ justifyContent: 'flex-start', marginBottom: '1rem' }}>
-              <MapPin size={14} /> {slot.location}
-            </div>
-
-            <div className="flex-between" style={{ marginTop: '2rem', alignItems: 'flex-end' }}>
-              <div>
-                <p className="text-sm text-muted text-bold" style={{ fontSize: '10px' }}>STANDARD RATE</p>
-                <div style={{ display: 'flex', alignItems: 'baseline' }}>
-                  <span className="text-bold" style={{ fontSize: '1.5rem' }}>₹{slot.pricePerHour}</span>
-                  <small className="text-muted" style={{ marginLeft: '4px' }}>/hr</small>
-                </div>
-              </div>
-
-              {slot.available && (
-                <button 
-                  onClick={() => openModal(slot)}
-                  className="btn btn-primary"
-                  style={{ padding: '0.5rem', borderRadius: '0.5rem' }}
-                >
-                  <Plus size={20} />
-                </button>
-              )}
-            </div>
-
-            {!slot.available && (
-              <div style={{ position: 'absolute', inset: 0, background: 'rgba(239, 68, 68, 0.05)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span className="badge badge-danger" style={{ 
-                  fontSize: '1.25rem', 
-                  padding: '0.5rem 1rem',
-                  border: '2px solid rgba(239, 68, 68, 0.8)',
-                  background: 'rgba(239, 68, 68, 0.2)',
-                  color: '#fca5a5',
-                  boxShadow: '0 8px 32px rgba(239,68,68,0.3)'
-                }}>OCCUPIED</span>
-              </div>
-            )}
+      {finalSlots.length === 0
+        ? <div className="glass-panel" style={{ padding:'4rem', textAlign:'center' }}>
+            <p className="text-muted">No {vtype} slots at this location.</p>
           </div>
-        ))}
-      </div>
+        : <div className="grid-cards animate-fade-up delay-100">
+            {finalSlots.map(slot => (
+              <div key={slot.id} className="glass-panel"
+                style={{ opacity:slot.available?1:0.8, borderColor:slot.available?'var(--glass-border)':'rgba(239,68,68,0.4)', position:'relative', overflow:'hidden' }}>
+                <div className="flex-between" style={{ alignItems:'flex-start', marginBottom:'1.5rem' }}>
+                  <div style={{ width:48, height:48, borderRadius:'0.75rem', background:'rgba(255,255,255,0.05)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    {slot.type==='Four Wheeler' ? <Car color="var(--primary)"/> : <Bike color="var(--primary)"/>}
+                  </div>
+                  <span className={`badge ${slot.available?'badge-success':'badge-danger'}`}>
+                    {slot.available?'AVAILABLE':'OCCUPIED'}
+                  </span>
+                </div>
+                <h3 className="heading-md" style={{ marginBottom:'0.25rem' }}>{slot.slotNumber}</h3>
+                <div className="flex-center gap-sm text-sm text-muted" style={{ justifyContent:'flex-start', marginBottom:'1rem' }}>
+                  <MapPin size={14}/> 
+                  {[slot.street, slot.area, slot.district].filter(Boolean).join(', ') || slot.location}
+                </div>
+                <div className="flex-between" style={{ marginTop:'2rem', alignItems:'flex-end' }}>
+                  <div>
+                    <p style={{ fontSize:'10px', color:'var(--text-muted)', fontWeight:700 }}>RATE</p>
+                    <div style={{ display:'flex', alignItems:'baseline' }}>
+                      <span style={{ fontSize:'1.5rem', fontWeight:800 }}>₹{slot.pricePerHour}</span>
+                      <small className="text-muted" style={{ marginLeft:4 }}>/hr</small>
+                    </div>
+                  </div>
+                  {slot.available && (
+                    <button onClick={() => openModal(slot)} className="btn btn-primary" style={{ padding:'0.5rem 1.1rem', borderRadius:'0.5rem' }}>
+                      Book Now
+                    </button>
+                  )}
+                </div>
+                {!slot.available && (
+                  <div style={{ position:'absolute', inset:0, background:'rgba(239,68,68,0.05)', backdropFilter:'blur(3px)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    <span className="badge badge-danger" style={{ fontSize:'1.2rem', padding:'0.5rem 1rem', border:'2px solid rgba(239,68,68,0.8)', background:'rgba(239,68,68,0.2)', color:'#fca5a5', boxShadow:'0 8px 32px rgba(239,68,68,0.3)' }}>OCCUPIED</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+      }
 
-      {bookingModal && (
+      {/* Booking Modal */}
+      {modal && (
         <div className="modal-overlay">
           <div className="glass-panel modal-content">
-            <h2 className="heading-md" style={{ marginBottom: '0.5rem' }}>Reserve Slot: {bookingModal.slotNumber}</h2>
-            <p className="text-sm text-muted" style={{ marginBottom: '1.5rem' }}>Confirm your vehicle details and timing to finalize booking.</p>
-            
-            {error && (
-              <div className="alert alert-danger">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleBookSlot}>
-              <div className="form-row" style={{ marginBottom: '1.5rem' }}>
+            <h2 className="heading-md" style={{ marginBottom:'0.5rem' }}>Reserve — {modal.slotNumber}</h2>
+            <p className="text-sm text-muted" style={{ marginBottom:'1.5rem' }}>Fill in your details to confirm the booking.</p>
+            {error && <div className="alert alert-danger">{error}</div>}
+            <form onSubmit={handleBook}>
+              <div className="form-row" style={{ marginBottom:'1.5rem' }}>
                 <div className="form-group">
                   <label className="form-label">Booking Date</label>
-                  <input 
-                    type="date"
-                    value={formData.parkingDate}
-                    onChange={(e) => setFormData({...formData, parkingDate: e.target.value})}
-                    className="form-input"
-                    required 
-                  />
+                  <input type="date" className="form-input" value={form.parkingDate}
+                    onChange={e => setForm({...form, parkingDate:e.target.value})} required/>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Vehicle Number</label>
-                  <input 
-                    type="text" 
-                    value={formData.vehicleNumber}
-                    onChange={(e) => setFormData({...formData, vehicleNumber: e.target.value.toUpperCase()})}
-                    placeholder="e.g. TN 01 AB 1234" 
-                    className="form-input"
-                    required 
-                  />
+                  <input type="text" className="form-input" placeholder="e.g. TN 01 AB 1234"
+                    value={form.vehicleNumber} onChange={e => setForm({...form, vehicleNumber:e.target.value.toUpperCase()})} required/>
                 </div>
               </div>
-
-              <div className="form-row" style={{ alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+              <div className="form-row" style={{ marginBottom:'1.5rem' }}>
                 <div className="form-group">
-                  <label className="form-label">Starting Time</label>
-                  <input 
-                    type="time" 
-                    value={formData.parkingTime}
-                    onChange={(e) => setFormData({...formData, parkingTime: e.target.value})}
-                    className="form-input"
-                    required 
-                  />
+                  <label className="form-label">Start Time</label>
+                  <input type="time" className="form-input" value={form.parkingTime}
+                    onChange={e => setForm({...form, parkingTime:e.target.value})} required/>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Ending Time</label>
-                  <input 
-                    type="time" 
-                    value={formData.endTime}
-                    onChange={(e) => setFormData({...formData, endTime: e.target.value})}
-                    className="form-input"
-                    required 
-                  />
+                  <label className="form-label">End Time</label>
+                  <input type="time" className="form-input" value={form.endTime}
+                    onChange={e => setForm({...form, endTime:e.target.value})} required/>
                 </div>
               </div>
-
               <div className="form-group">
-                <label className="form-label">Duration Preview</label>
-                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
-                  <div className="flex-between text-sm" style={{ marginBottom: '0.5rem' }}>
-                    <span className="text-muted">Type:</span>
-                    <span className="text-bold">{bookingModal.type}</span>
-                  </div>
-                  <div className="flex-between text-sm">
-                    <span className="text-muted">Rate:</span>
-                    <span className="text-bold text-gradient">₹{bookingModal.pricePerHour}/hr</span>
-                  </div>
+                <label className="form-label">Summary</label>
+                <div style={{ background:'rgba(255,255,255,0.03)', padding:'1rem', borderRadius:'0.75rem', border:'1px solid var(--glass-border)' }}>
+                  {[['Location', modal.parkingName || modal.location],['Type', modal.type],['Rate',`₹${modal.pricePerHour}/hr`]].map(([k,v])=>(
+                    <div key={k} className="flex-between text-sm" style={{ marginBottom:'0.4rem' }}>
+                      <span className="text-muted">{k}:</span>
+                      <span className="text-bold" style={k==='Rate'?{color:'var(--accent)'}:{}}>{v}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
-
-              <div className="form-row">
-                <button type="button" onClick={() => setBookingModal(null)} className="btn btn-outline">Cancel</button>
+              <div className="form-row" style={{ marginTop:'1.5rem' }}>
+                <button type="button" onClick={() => setModal(null)} className="btn btn-outline">Cancel</button>
                 <button type="submit" className="btn btn-primary">Confirm Booking</button>
               </div>
             </form>
@@ -304,24 +374,3 @@ function UserDashboard({ user }) {
     </div>
   );
 }
-
-const Plus = ({ size }) => {
-  return (
-    <svg 
-      xmlns="http://www.w3.org/2000/svg" 
-      width={size} 
-      height={size} 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2.5" 
-      strokeLinecap="round" 
-      strokeLinejoin="round"
-    >
-      <path d="M5 12h14" />
-      <path d="M12 5v14" />
-    </svg>
-  );
-};
-
-export default UserDashboard;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, User, ArrowRight } from 'lucide-react';
+import { ShieldCheck, User, ArrowRight, ParkingSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 function Home() {
@@ -10,11 +10,23 @@ function Home() {
       <div className="animate-fade-up">
         <h1 className="heading-xl text-gradient">SMART PARKING SOLUTION</h1>
         <p className="subtitle mb-lg">
-          Smart parking solution for modern mobility. Check real-time availability and reserve your parking slot instantly. </p>
+          Smart parking solution for modern mobility. Check real-time availability and reserve your parking slot instantly.
+        </p>
       </div>
 
-      <div className="grid-cards animate-fade-up delay-200" style={{ width: '100%', maxWidth: '900px', marginTop: '2rem' }}>
-        <div 
+      <div
+        className="animate-fade-up delay-200"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '1.5rem',
+          width: '100%',
+          maxWidth: '960px',
+          marginTop: '2rem',
+        }}
+      >
+        {/* User Portal */}
+        <div
           className="glass-panel flex-col flex-center"
           style={{ gap: '1.5rem', cursor: 'pointer' }}
           onClick={() => navigate('/login/user')}
@@ -31,7 +43,26 @@ function Home() {
           </button>
         </div>
 
-        <div 
+        {/* Slot Owner Portal */}
+        <div
+          className="glass-panel flex-col flex-center"
+          style={{ gap: '1.5rem', cursor: 'pointer', borderColor: 'var(--success)' }}
+          onClick={() => navigate('/login/owner')}
+        >
+          <div className="flex-center" style={{ width: '80px', height: '80px', borderRadius: '1.5rem', background: 'rgba(16, 185, 129, 0.15)' }}>
+            <ParkingSquare size={40} color="var(--success)" />
+          </div>
+          <div>
+            <h2 className="heading-md">SLOT OWNER</h2>
+            <p className="text-muted text-sm">List your parking spaces, set prices, and track earnings</p>
+          </div>
+          <button className="btn btn-outline" style={{ width: '100%', marginTop: 'auto', borderColor: 'var(--success)', color: 'var(--success)' }}>
+            Login as Owner <ArrowRight size={18} />
+          </button>
+        </div>
+
+        {/* Admin Portal */}
+        <div
           className="glass-panel flex-col flex-center"
           style={{ gap: '1.5rem', cursor: 'pointer', borderColor: 'var(--secondary)' }}
           onClick={() => navigate('/login/admin')}
@@ -41,7 +72,7 @@ function Home() {
           </div>
           <div>
             <h2 className="heading-md">ADMIN PORTAL</h2>
-            <p className="text-muted text-sm">Manage slots, pricing, and monitor occupancy</p>
+            <p className="text-muted text-sm">Manage slot owners, users, and monitor all bookings</p>
           </div>
           <button className="btn btn-outline" style={{ width: '100%', marginTop: 'auto', borderColor: 'var(--secondary)', color: 'var(--secondary)' }}>
             Login as Admin <ArrowRight size={18} />

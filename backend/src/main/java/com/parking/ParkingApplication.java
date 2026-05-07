@@ -47,19 +47,7 @@ public class ParkingApplication {
                 userRepository.save(admin);
             }
 
-            // Seed ST Cycle Parking (100 Slots) if no slots exist
-            if (slotRepository.count() == 0) {
-                System.out.println("Seeding 100 slots for ST Cycle Parking in Common Area...");
-                for (int i = 1; i <= 100; i++) {
-                    Slot slot = new Slot();
-                    slot.setSlotNumber(String.format("STC-%03d", i));
-                    slot.setType("Two Wheeler"); // Using Two Wheeler for cycles
-                    slot.setPricePerHour(10.0);
-                    slot.setLocation("Common Area");
-                    slot.setAvailable(true);
-                    slotRepository.save(slot);
-                }
-            }
+            // Slot seeding logic has been removed to prevent auto-creating "Common Area" slots
         };
     }
 }
